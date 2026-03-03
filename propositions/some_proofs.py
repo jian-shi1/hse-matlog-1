@@ -29,7 +29,13 @@ def prove_and_commutativity() -> Proof:
         A valid proof of ``'(q&p)'`` from the single assumption ``'(p&q)'`` via
         the inference rules `A_RULE`, `AE1_RULE`, and `AE2_RULE`.
     """
-    # Task 4.7
+    return Proof(
+        InferenceRule([Formula.parse('(p&q)')], Formula.parse('(q&p)')),
+        {A_RULE, AE1_RULE, AE2_RULE},
+        [Proof.Line(Formula.parse('(p&q)')),
+         Proof.Line(Formula.parse('q'), AE1_RULE, [0]),
+         Proof.Line(Formula.parse('p'), AE2_RULE, [0]),
+         Proof.Line(Formula.parse('(q&p)'), A_RULE, [1, 2])])
 
 def prove_I0() -> Proof:
     """Proves `~propositions.axiomatic_systems.I0` via
@@ -42,7 +48,17 @@ def prove_I0() -> Proof:
         `~propositions.axiomatic_systems.I1`, and
         `~propositions.axiomatic_systems.D`.
     """
-    # Task 4.8
+    return Proof(
+        I0,
+        {MP, I1, D},
+        [Proof.Line(Formula.parse('(p->((p->p)->p))'), I1, []),
+         Proof.Line(Formula.parse('(p->(p->p))'), I1, []),
+         Proof.Line(
+             Formula.parse(
+                 '((p->((p->p)->p))->((p->(p->p))->(p->p)))'),
+             D, []),
+         Proof.Line(Formula.parse('((p->(p->p))->(p->p))'), MP, [0, 2]),
+         Proof.Line(Formula.parse('(p->p)'), MP, [1, 3])])
 
 #: Hypothetical syllogism
 HS = InferenceRule([Formula.parse('(p->q)'), Formula.parse('(q->r)')],

@@ -29,7 +29,13 @@ def rule_nonsoundness_from_specialization_nonsoundness(
     """
     assert specialization.is_specialization_of(general)
     assert not evaluate_inference(specialization, model)
-    # Task 4.9
+    specialization_map = general.specialization_map(specialization)
+    assert specialization_map is not None
+    counterexample_model = {}
+    for variable in general.variables():
+        counterexample_model[variable] = evaluate(specialization_map[variable],
+                                                  model)
+    return counterexample_model
 
 def nonsound_rule_of_nonsound_proof(proof: Proof, model: Model) -> \
         Tuple[InferenceRule, Model]:
@@ -48,4 +54,14 @@ def nonsound_rule_of_nonsound_proof(proof: Proof, model: Model) -> \
     """
     assert proof.is_valid()
     assert not evaluate_inference(proof.statement, model)
-    # Task 4.10
+    for line_number, line in enumerate(proof.lines):
+        if evaluate(line.formula, model):
+            continue
+        assert not line.is_assumption()
+        specialization = proof.rule_for_line(line_number)
+        assert specialization is not None
+        counterexample_model = \
+            rule_nonsoundness_from_specialization_nonsoundness(
+                line.rule, specialization, model)
+        return line.rule, counterexample_model
+    assert False
