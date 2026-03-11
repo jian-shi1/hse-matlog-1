@@ -444,6 +444,14 @@ def prove_specialization(proof: Proof, specialization: InferenceRule) -> Proof:
     assert proof.is_valid()
     assert specialization.is_specialization_of(proof.statement)
     # Task 5.1
+    map1 = proof.statement.specialization_map(specialization)
+    lines = []
+    for line in proof.lines:
+        if line.is_assumption():
+            lines.append(Proof.Line(line.formula.substitute_variables(map1)))
+        else:
+            lines.append(Proof.Line(line.formula.substitute_variables(map1), line.rule, line.assumptions))
+    return Proof(specialization, proof.rules, lines)
 
 def _inline_proof_once(main_proof: Proof, line_number: int,
                        lemma_proof: Proof) -> Proof:
@@ -474,6 +482,40 @@ def _inline_proof_once(main_proof: Proof, line_number: int,
     assert main_proof.lines[line_number].rule == lemma_proof.statement
     assert lemma_proof.is_valid()
     # Task 5.2a
+    rule = main_proof.rule_for_line(line_number)
+    lemma = prove_specialization(lemma_proof, rule)
+    new_lines = list(main_proof.lines[:line_number])
+    map1 = {}
+    main_line = main_proof.lines[line_number]
+
+    for i, line in enumerate(lemma.lines):
+        if line.is_assumption():
+            j = lemma.statement.assumptions.index(line.formula)
+            map1[i] = main_line.assumptions[j]
+        else:
+            nums = [map1[k] for k in line.assumptions]
+            new_lines.append(Proof.Line(line.formula, line.rule, nums))
+            map1[i] = len(new_lines) - 1
+
+    last = map1[len(lemma.lines) - 1]
+    add = len(new_lines) - line_number - 1
+
+    for i in range(line_number + 1, len(main_proof.lines)):
+        line = main_proof.lines[i]
+        if line.is_assumption():
+            new_lines.append(line)
+        else:
+            nums = []
+            for k in line.assumptions:
+                if k < line_number:
+                    nums.append(k)
+                elif k == line_number:
+                    nums.append(last)
+                else:
+                    nums.append(k + add)
+            new_lines.append(Proof.Line(line.formula, line.rule, nums))
+
+    return Proof(main_proof.statement, main_proof.rules.union(lemma_proof.rules), new_lines)
 
 def inline_proof(main_proof: Proof, lemma_proof: Proof) -> Proof:
     """Inlines the given proof of a "lemma" inference rule into the given proof
@@ -496,3 +538,10 @@ def inline_proof(main_proof: Proof, lemma_proof: Proof) -> Proof:
     assert main_proof.is_valid()
     assert lemma_proof.is_valid()
     # Task 5.2b
+    proof = main_proof
+    for i in range(len(proof.lines)):
+        line = proof.lines[i]
+        if not line.is_assumption() and line.rule == lemma_proof.statement:
+            proof = _inline_proof_once(proof, i, lemma_proof)
+            return inline_proof(proof, lemma_proof)
+    return Proof(proof.statement, proof.rules - {lemma_proof.statement}, proof.lines)

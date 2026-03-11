@@ -35,6 +35,16 @@ def prove_corollary(antecedent_proof: Proof, consequent: Formula,
                          Formula('->', antecedent_proof.statement.conclusion,
                                  consequent)).is_specialization_of(conditional)
     # Task 5.3a
+    a = antecedent_proof.statement.conclusion
+    f = Formula('->', a, consequent)
+    lines = list(antecedent_proof.lines)
+    lines.append(Proof.Line(f, conditional, []))
+    lines.append(Proof.Line(consequent, MP, [len(lines) - 2, len(lines) - 1]))
+    return Proof(
+        InferenceRule(antecedent_proof.statement.assumptions, consequent),
+        antecedent_proof.rules.union({MP, conditional}),
+        lines
+    )
 
 def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
                    consequent: Formula, double_conditional: InferenceRule) -> \
@@ -70,6 +80,28 @@ def combine_proofs(antecedent1_proof: Proof, antecedent2_proof: Proof,
         Formula('->', antecedent2_proof.statement.conclusion, consequent))
         ).is_specialization_of(double_conditional)
     # Task 5.3b
+    a = antecedent1_proof.statement.conclusion
+    b = antecedent2_proof.statement.conclusion
+    f = Formula('->', a, Formula('->', b, consequent))
+    lines = list(antecedent1_proof.lines)
+    shift = len(lines)
+
+    for line in antecedent2_proof.lines:
+        if line.is_assumption():
+            lines.append(line)
+        else:
+            nums = [i + shift for i in line.assumptions]
+            lines.append(Proof.Line(line.formula, line.rule, nums))
+
+    lines.append(Proof.Line(f, double_conditional, []))
+    lines.append(Proof.Line(Formula('->', b, consequent), MP, [len(antecedent1_proof.lines) - 1, len(lines) - 1]))
+    lines.append(Proof.Line(consequent, MP, [shift + len(antecedent2_proof.lines) - 1, len(lines) - 1]))
+
+    return Proof(
+        InferenceRule(antecedent1_proof.statement.assumptions, consequent),
+        antecedent1_proof.rules.union({MP, double_conditional}),
+        lines
+    )
 
 def remove_assumption(proof: Proof) -> Proof:
     """Converts the given proof of some `conclusion` formula, the last
@@ -96,6 +128,42 @@ def remove_assumption(proof: Proof) -> Proof:
     for rule in proof.rules:
         assert rule == MP or len(rule.assumptions) == 0
     # Task 5.4
+    a = proof.statement.assumptions[-1]
+    new_assumptions = proof.statement.assumptions[:-1]
+    new_lines = []
+    map1 = {}
+
+    for i, line in enumerate(proof.lines):
+        f = line.formula
+
+        if f == a:
+            new_lines.append(Proof.Line(Formula('->', a, a), I0, []))
+            map1[i] = len(new_lines) - 1
+        elif line.is_assumption() or line.rule != MP:
+            new_lines.append(line)
+            new_lines.append(Proof.Line(Formula('->', f, Formula('->', a, f)), I1, []))
+            new_lines.append(Proof.Line(Formula('->', a, f), MP, [len(new_lines) - 2, len(new_lines) - 1]))
+            map1[i] = len(new_lines) - 1
+        else:
+            j = line.assumptions[0]
+            k = line.assumptions[1]
+            fj = proof.lines[j].formula
+            df = Formula(
+                '->',
+                Formula('->', a, Formula('->', fj, f)),
+                Formula('->', Formula('->', a, fj), Formula('->', a, f))
+            )
+            new_lines.append(Proof.Line(df, D, []))
+            new_lines.append(
+                Proof.Line(Formula('->', Formula('->', a, fj), Formula('->', a, f)), MP, [map1[k], len(new_lines) - 1]))
+            new_lines.append(Proof.Line(Formula('->', a, f), MP, [map1[j], len(new_lines) - 1]))
+            map1[i] = len(new_lines) - 1
+
+    return Proof(
+        InferenceRule(new_assumptions, Formula('->', a, proof.statement.conclusion)),
+        proof.rules.union({MP, I0, I1, D}),
+        new_lines
+    )
 
 def prove_from_opposites(proof_of_affirmation: Proof,
                          proof_of_negation: Proof, conclusion: Formula) -> \
@@ -123,6 +191,7 @@ def prove_from_opposites(proof_of_affirmation: Proof,
            proof_of_negation.statement.conclusion
     assert proof_of_affirmation.rules == proof_of_negation.rules
     # Task 5.6
+    return combine_proofs(proof_of_negation, proof_of_affirmation, conclusion, I2)
 
 def prove_by_way_of_contradiction(proof: Proof) -> Proof:
     """Converts the given proof of ``'~(p->p)'``, the last assumption of which
@@ -151,3 +220,20 @@ def prove_by_way_of_contradiction(proof: Proof) -> Proof:
     for rule in proof.rules:
         assert rule == MP or len(rule.assumptions) == 0
     # Task 5.7
+    a = proof.statement.assumptions[-1]
+    f = a.first
+    proof1 = remove_assumption(proof)
+    lines = list(proof1.lines)
+
+    lines.append(
+        Proof.Line(Formula('->', Formula('->', a, Formula.parse('~(p->p)')), Formula('->', Formula.parse('(p->p)'), f)),
+                   N, []))
+    lines.append(Proof.Line(Formula('->', Formula.parse('(p->p)'), f), MP, [len(lines) - 2, len(lines) - 1]))
+    lines.append(Proof.Line(Formula.parse('(p->p)'), I0, []))
+    lines.append(Proof.Line(f, MP, [len(lines) - 1, len(lines) - 2]))
+
+    return Proof(
+        InferenceRule(proof.statement.assumptions[:-1], f),
+        proof.rules.union({MP, I0, I1, D, N}),
+        lines
+    )
