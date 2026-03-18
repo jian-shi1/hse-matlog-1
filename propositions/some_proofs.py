@@ -64,6 +64,19 @@ def prove_I0() -> Proof:
 HS = InferenceRule([Formula.parse('(p->q)'), Formula.parse('(q->r)')],
                    Formula.parse('(p->r)'))
 
+def _add_assumptionless_proof(lines: list[Proof.Line], proof: Proof) -> int:
+    assert proof.is_valid()
+    assert len(proof.statement.assumptions) == 0
+    shift = len(lines)
+    for line in proof.lines:
+        if line.is_assumption():
+            lines.append(line)
+        else:
+            lines.append(Proof.Line(line.formula, line.rule,
+                                    [index + shift for index in
+                                     line.assumptions]))
+    return len(lines) - 1
+
 def prove_hypothetical_syllogism() -> Proof:
     """Proves `HS` via `~propositions.axiomatic_systems.MP`,
     `~propositions.axiomatic_systems.I0`, `~propositions.axiomatic_systems.I1`,
@@ -108,6 +121,15 @@ def prove_I2() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7a
+    proof = Proof(
+        InferenceRule([Formula.parse('~p')], Formula.parse('(p->q)')),
+        {MP, I1, N},
+        [Proof.Line(Formula.parse('~p')),
+         Proof.Line(Formula.parse('(~p->(~q->~p))'), I1, []),
+         Proof.Line(Formula.parse('(~q->~p)'), MP, [0, 1]),
+         Proof.Line(Formula.parse('((~q->~p)->(p->q))'), N, []),
+         Proof.Line(Formula.parse('(p->q)'), MP, [2, 3])])
+    return remove_assumption(proof)
 
 #: Double-negation elimination
 _NNE = InferenceRule([], Formula.parse('(~~p->p)'))
@@ -127,6 +149,21 @@ def _prove_NNE() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7b
+    proof = Proof(
+        InferenceRule([Formula.parse('~~p'), Formula.parse('~p')],
+                      Formula.parse('~(p->p)')),
+        {MP, I0, I1, D, N},
+        [Proof.Line(Formula.parse('~~p')),
+         Proof.Line(Formula.parse('~p'))])
+    lines = list(proof.lines)
+    i2_proof = prove_specialization(
+        prove_I2(),
+        InferenceRule([], Formula.parse('(~~p->(~p->~(p->p)))')))
+    i2_line = _add_assumptionless_proof(lines, i2_proof)
+    lines.append(Proof.Line(Formula.parse('(~p->~(p->p))'), MP, [0, i2_line]))
+    lines.append(Proof.Line(Formula.parse('~(p->p)'), MP, [1, len(lines) - 1]))
+    return remove_assumption(prove_by_way_of_contradiction(
+        Proof(proof.statement, {MP, I0, I1, D, N}, lines)))
 
 def prove_NN() -> Proof:
     """Proves `~propositions.axiomatic_systems.NN` via
@@ -143,6 +180,9 @@ def prove_NN() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7c
+    triple_negation = prove_specialization(
+        _prove_NNE(), InferenceRule([], Formula.parse('(~~~p->~p)')))
+    return prove_corollary(triple_negation, Formula.parse('(p->~~p)'), N)
 
 #: Contraposition
 _CP = InferenceRule([], Formula.parse('((p->q)->(~q->~p))'))
@@ -162,6 +202,29 @@ def _prove_CP() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7d
+    lines = [Proof.Line(Formula.parse('(p->q)')),
+             Proof.Line(Formula.parse('~q')),
+             Proof.Line(Formula.parse('~~p'))]
+    nne_line = _add_assumptionless_proof(lines, _prove_NNE())
+    lines.append(Proof.Line(Formula.parse('p'), MP, [2, nne_line]))
+    p_line = len(lines) - 1
+    lines.append(Proof.Line(Formula.parse('q'), MP, [p_line, 0]))
+    q_line = len(lines) - 1
+    i2_proof = prove_specialization(
+        prove_I2(),
+        InferenceRule([], Formula.parse('(~q->(q->~(p->p)))')))
+    i2_line = _add_assumptionless_proof(lines, i2_proof)
+    lines.append(Proof.Line(Formula.parse('(q->~(p->p))'), MP, [1, i2_line]))
+    q_to_contradiction_line = len(lines) - 1
+    lines.append(Proof.Line(Formula.parse('~(p->p)'), MP,
+                            [q_line, q_to_contradiction_line]))
+    proof = Proof(
+        InferenceRule([Formula.parse('(p->q)'), Formula.parse('~q'),
+                       Formula.parse('~~p')], Formula.parse('~(p->p)')),
+        {MP, I0, I1, D, N},
+        lines)
+    return remove_assumption(remove_assumption(
+        prove_by_way_of_contradiction(proof)))
 
 def prove_NI() -> Proof:
     """Proves `~propositions.axiomatic_systems.NI` via
@@ -178,6 +241,32 @@ def prove_NI() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7e
+    lines = [Proof.Line(Formula.parse('p')),
+             Proof.Line(Formula.parse('~q')),
+             Proof.Line(Formula.parse('~~(p->q)'))]
+    nne_proof = prove_specialization(
+        _prove_NNE(), InferenceRule([], Formula.parse('(~~(p->q)->(p->q))')))
+    nne_line = _add_assumptionless_proof(lines, nne_proof)
+    lines.append(Proof.Line(Formula.parse('(p->q)'), MP, [2, nne_line]))
+    p_implies_q_line = len(lines) - 1
+    lines.append(Proof.Line(Formula.parse('q'), MP, [0, p_implies_q_line]))
+    q_line = len(lines) - 1
+    i2_proof = prove_specialization(
+        prove_I2(),
+        InferenceRule([], Formula.parse('(~q->(q->~(p->p)))')))
+    i2_line = _add_assumptionless_proof(lines, i2_proof)
+    lines.append(Proof.Line(Formula.parse('(q->~(p->p))'), MP, [1, i2_line]))
+    q_to_contradiction_line = len(lines) - 1
+    lines.append(Proof.Line(Formula.parse('~(p->p)'), MP,
+                            [q_line, q_to_contradiction_line]))
+    proof = Proof(
+        InferenceRule([Formula.parse('p'), Formula.parse('~q'),
+                       Formula.parse('~~(p->q)')],
+                      Formula.parse('~(p->p)')),
+        {MP, I0, I1, D, N},
+        lines)
+    return remove_assumption(remove_assumption(
+        prove_by_way_of_contradiction(proof)))
 
 #: Consequentia mirabilis
 _CM = InferenceRule([Formula.parse('(~p->p)')], Formula.parse('p'))
@@ -197,6 +286,21 @@ def _prove_CM() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7f
+    lines = [Proof.Line(Formula.parse('(~p->p)')),
+             Proof.Line(Formula.parse('~p')),
+             Proof.Line(Formula.parse('p'), MP, [1, 0])]
+    i2_proof = prove_specialization(
+        prove_I2(),
+        InferenceRule([], Formula.parse('(~p->(p->~(p->p)))')))
+    i2_line = _add_assumptionless_proof(lines, i2_proof)
+    lines.append(Proof.Line(Formula.parse('(p->~(p->p))'), MP, [1, i2_line]))
+    lines.append(Proof.Line(Formula.parse('~(p->p)'), MP, [2, len(lines) - 1]))
+    proof = Proof(
+        InferenceRule([Formula.parse('(~p->p)'), Formula.parse('~p')],
+                      Formula.parse('~(p->p)')),
+        {MP, I0, I1, D, N},
+        lines)
+    return prove_by_way_of_contradiction(proof)
 
 def prove_R() -> Proof:
     """Proves `~propositions.axiomatic_systems.R` via
@@ -213,6 +317,53 @@ def prove_R() -> Proof:
         `~propositions.axiomatic_systems.N`.
     """
     # Optional Task 6.7g
+    neg_q_lines = [Proof.Line(Formula.parse('(q->p)')),
+                   Proof.Line(Formula.parse('(~q->p)')),
+                   Proof.Line(Formula.parse('~p')),
+                   Proof.Line(Formula.parse('~~q'))]
+    nne_proof = prove_specialization(
+        _prove_NNE(), InferenceRule([], Formula.parse('(~~q->q)')))
+    nne_line = _add_assumptionless_proof(neg_q_lines, nne_proof)
+    neg_q_lines.append(Proof.Line(Formula.parse('q'), MP, [3, nne_line]))
+    q_line = len(neg_q_lines) - 1
+    neg_q_lines.append(Proof.Line(Formula.parse('p'), MP, [q_line, 0]))
+    p_line = len(neg_q_lines) - 1
+    i2_proof = prove_specialization(
+        prove_I2(),
+        InferenceRule([], Formula.parse('(~p->(p->~(p->p)))')))
+    i2_line = _add_assumptionless_proof(neg_q_lines, i2_proof)
+    neg_q_lines.append(Proof.Line(Formula.parse('(p->~(p->p))'), MP,
+                                  [2, i2_line]))
+    p_to_contradiction_line = len(neg_q_lines) - 1
+    neg_q_lines.append(Proof.Line(Formula.parse('~(p->p)'), MP,
+                                  [p_line, p_to_contradiction_line]))
+    neg_q_proof = prove_by_way_of_contradiction(
+        Proof(InferenceRule([Formula.parse('(q->p)'),
+                             Formula.parse('(~q->p)'),
+                             Formula.parse('~p'),
+                             Formula.parse('~~q')],
+                            Formula.parse('~(p->p)')),
+              {MP, I0, I1, D, N},
+              neg_q_lines))
+    main_lines = list(neg_q_proof.lines)
+    main_lines.append(Proof.Line(Formula.parse('(~q->p)')))
+    main_lines.append(Proof.Line(Formula.parse('p'), MP,
+                                 [len(main_lines) - 2, len(main_lines) - 1]))
+    neg_proof = remove_assumption(
+        Proof(InferenceRule([Formula.parse('(q->p)'), Formula.parse('(~q->p)'),
+                             Formula.parse('~p')], Formula.parse('p')),
+              {MP, I0, I1, D, N},
+              main_lines))
+    main_lines = list(neg_proof.lines)
+    main_lines.append(Proof.Line(Formula.parse('p'), _CM,
+                                 [len(main_lines) - 1]))
+    main_proof = Proof(
+        InferenceRule([Formula.parse('(q->p)'), Formula.parse('(~q->p)')],
+                      Formula.parse('p')),
+        neg_proof.rules.union({_CM}),
+        main_lines)
+    return remove_assumption(remove_assumption(
+        inline_proof(main_proof, _prove_CM())))
 
 def prove_N() -> Proof:
     """Proves `~propositions.axiomatic_systems.N` via
@@ -229,6 +380,19 @@ def prove_N() -> Proof:
         `~propositions.axiomatic_systems.N_ALTERNATIVE`.
     """
     # Optional Task 6.8
+    proof = Proof(
+        InferenceRule([Formula.parse('(~q->~p)'), Formula.parse('p')],
+                      Formula.parse('q')),
+        {MP, I1, N_ALTERNATIVE},
+        [Proof.Line(Formula.parse('(~q->~p)')),
+         Proof.Line(Formula.parse('p')),
+         Proof.Line(Formula.parse('(p->(~q->p))'), I1, []),
+         Proof.Line(Formula.parse('(~q->p)'), MP, [1, 2]),
+         Proof.Line(Formula.parse('((~q->~p)->((~q->p)->q))'),
+                    N_ALTERNATIVE, []),
+         Proof.Line(Formula.parse('((~q->p)->q)'), MP, [0, 4]),
+         Proof.Line(Formula.parse('q'), MP, [3, 5])])
+    return remove_assumption(remove_assumption(proof))
 
 def prove_NA1() -> Proof:
     """Proves `~propositions.axiomatic_systems.NA1` via
