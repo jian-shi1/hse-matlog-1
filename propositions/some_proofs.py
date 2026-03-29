@@ -410,6 +410,13 @@ def prove_NA1() -> Proof:
         `~propositions.axiomatic_systems.AE1`.
     """
     # Optional Task 6.9a
+    main_proof = Proof(
+        NA1,
+        {MP, AE1, _CP},
+        [Proof.Line(Formula.parse('((p&q)->q)'), AE1, []),
+         Proof.Line(Formula.parse('(((p&q)->q)->(~q->~(p&q)))'), _CP, []),
+         Proof.Line(Formula.parse('(~q->~(p&q))'), MP, [0, 1])])
+    return inline_proof(main_proof, _prove_CP())
 
 def prove_NA2() -> Proof:
     """Proves `~propositions.axiomatic_systems.NA2` via
@@ -427,6 +434,13 @@ def prove_NA2() -> Proof:
         `~propositions.axiomatic_systems.AE2`.
     """
     # Optional Task 6.9b
+    main_proof = Proof(
+        NA2,
+        {MP, AE2, _CP},
+        [Proof.Line(Formula.parse('((p&q)->p)'), AE2, []),
+         Proof.Line(Formula.parse('(((p&q)->p)->(~p->~(p&q)))'), _CP, []),
+         Proof.Line(Formula.parse('(~p->~(p&q))'), MP, [0, 1])])
+    return inline_proof(main_proof, _prove_CP())
 
 def prove_NO() -> Proof:
     """Proves `~propositions.axiomatic_systems.NO` via
@@ -444,3 +458,45 @@ def prove_NO() -> Proof:
         `~propositions.axiomatic_systems.OE`.
     """
     # Optional Task 6.9c
+    lines = [Proof.Line(Formula.parse('~p')),
+             Proof.Line(Formula.parse('~q')),
+             Proof.Line(Formula.parse('~~(p|q)'))]
+    nne_line = _add_assumptionless_proof(
+        lines,
+        prove_specialization(_prove_NNE(),
+                             InferenceRule([],
+                                           Formula.parse('(~~(p|q)->(p|q))'))))
+    lines.append(Proof.Line(Formula.parse('(p|q)'), MP, [2, nne_line]))
+    p_or_q_line = len(lines) - 1
+    i2_p_line = _add_assumptionless_proof(
+        lines,
+        prove_specialization(
+            prove_I2(),
+            InferenceRule([], Formula.parse('(~p->(p->~(p->p)))'))))
+    lines.append(Proof.Line(Formula.parse('(p->~(p->p))'), MP, [0, i2_p_line]))
+    p_to_contradiction_line = len(lines) - 1
+    i2_q_line = _add_assumptionless_proof(
+        lines,
+        prove_specialization(
+            prove_I2(),
+            InferenceRule([], Formula.parse('(~q->(q->~(p->p)))'))))
+    lines.append(Proof.Line(Formula.parse('(q->~(p->p))'), MP, [1, i2_q_line]))
+    q_to_contradiction_line = len(lines) - 1
+    lines.append(Proof.Line(
+        Formula.parse('((p->~(p->p))->((q->~(p->p))->((p|q)->~(p->p))))'),
+        OE, []))
+    lines.append(Proof.Line(
+        Formula.parse('((q->~(p->p))->((p|q)->~(p->p)))'),
+        MP, [p_to_contradiction_line, len(lines) - 1]))
+    lines.append(Proof.Line(Formula.parse('((p|q)->~(p->p))'),
+                            MP, [q_to_contradiction_line, len(lines) - 1]))
+    lines.append(Proof.Line(Formula.parse('~(p->p)'),
+                            MP, [p_or_q_line, len(lines) - 1]))
+    proof = Proof(
+        InferenceRule([Formula.parse('~p'), Formula.parse('~q'),
+                       Formula.parse('~~(p|q)')],
+                      Formula.parse('~(p->p)')),
+        {MP, I0, I1, D, N, OE},
+        lines)
+    return remove_assumption(remove_assumption(
+        prove_by_way_of_contradiction(proof)))
