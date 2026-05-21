@@ -283,6 +283,17 @@ class Term:
         for variable in forbidden_variables:
             assert is_variable(variable)
         # Task 9.1
+        if is_constant(self.root) or is_variable(self.root):
+            if self.root in substitution_map:
+                term = substitution_map[self.root]
+                forbidden = term.variables().intersection(forbidden_variables)
+                if len(forbidden) > 0:
+                    raise ForbiddenVariableError(sorted(forbidden)[0])
+                return term
+            return self
+        return Term(self.root, [argument.substitute(
+            substitution_map, forbidden_variables) for argument in
+            self.arguments])
 
 @lru_cache(maxsize=100) # Cache the return value of is_equality
 def is_equality(string: str) -> bool:
@@ -682,6 +693,26 @@ class Formula:
         for variable in forbidden_variables:
             assert is_variable(variable)
         # Task 9.2
+        if is_equality(self.root) or is_relation(self.root):
+            return Formula(self.root, [argument.substitute(
+                substitution_map, forbidden_variables) for argument in
+                self.arguments])
+        if is_unary(self.root):
+            return Formula(self.root, self.first.substitute(
+                substitution_map, forbidden_variables))
+        if is_binary(self.root):
+            return Formula(self.root, self.first.substitute(
+                substitution_map, forbidden_variables),
+                           self.second.substitute(substitution_map,
+                                                  forbidden_variables))
+
+        substitution_map = {construct: substitution_map[construct]
+                            for construct in substitution_map
+                            if construct != self.variable}
+        forbidden_variables = set(forbidden_variables).union({self.variable})
+        return Formula(self.root, self.variable,
+                       self.statement.substitute(substitution_map,
+                                                 forbidden_variables))
 
     def propositional_skeleton(self) -> Tuple[PropositionalFormula,
                                               Mapping[str, Formula]]:
@@ -708,6 +739,25 @@ class Formula:
             (((z4&z5)|(~z6->z5)), {'z4': Ax[x=7], 'z5': x=7, 'z6': Q(y)})
         """
         # Task 9.8
+        substitution_map = {}
+        reverse_substitution_map = {}
+
+        def skeleton_helper(formula: Formula) -> PropositionalFormula:
+            if is_relation(formula.root) or is_equality(formula.root) or \
+                    is_quantifier(formula.root):
+                if formula not in reverse_substitution_map:
+                    variable = next(fresh_variable_name_generator)
+                    reverse_substitution_map[formula] = variable
+                    substitution_map[variable] = formula
+                return PropositionalFormula(reverse_substitution_map[formula])
+            if is_unary(formula.root):
+                return PropositionalFormula(formula.root,
+                                            skeleton_helper(formula.first))
+            return PropositionalFormula(formula.root,
+                                        skeleton_helper(formula.first),
+                                        skeleton_helper(formula.second))
+
+        return skeleton_helper(self), substitution_map
 
     @staticmethod
     def from_propositional_skeleton(skeleton: PropositionalFormula,
@@ -746,3 +796,12 @@ class Formula:
         for variable in skeleton.variables():
             assert variable in substitution_map
         # Task 9.10
+        if is_propositional_variable(skeleton.root):
+            return substitution_map[skeleton.root]
+        if is_unary(skeleton.root):
+            return Formula(skeleton.root, Formula.from_propositional_skeleton(
+                skeleton.first, substitution_map))
+        return Formula(skeleton.root, Formula.from_propositional_skeleton(
+            skeleton.first, substitution_map),
+                       Formula.from_propositional_skeleton(
+                           skeleton.second, substitution_map))

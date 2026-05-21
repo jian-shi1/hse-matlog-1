@@ -241,6 +241,57 @@ class Schema:
         for variable in bound_variables:
             assert is_variable(variable)
         # Task 9.3
+        if is_equality(formula.root):
+            return Formula(formula.root, [argument.substitute(
+                constants_and_variables_instantiation_map) for argument in
+                formula.arguments])
+
+        if is_relation(formula.root):
+            if formula.root not in relations_instantiation_map:
+                return Formula(formula.root, [argument.substitute(
+                    constants_and_variables_instantiation_map) for argument in
+                    formula.arguments])
+
+            relation_formula = relations_instantiation_map[formula.root]
+            offending_variables = \
+                relation_formula.free_variables().difference({'_'}).\
+                intersection(bound_variables)
+            if len(offending_variables) > 0:
+                raise Schema.BoundVariableError(
+                    sorted(offending_variables)[0], formula.root)
+
+            if len(formula.arguments) == 0:
+                return relation_formula
+
+            assert len(formula.arguments) == 1
+            argument = formula.arguments[0].substitute(
+                constants_and_variables_instantiation_map)
+            try:
+                return relation_formula.substitute({'_': argument})
+            except ForbiddenVariableError as e:
+                raise Schema.BoundVariableError(e.variable_name, formula.root)
+
+        if is_unary(formula.root):
+            return Formula(formula.root, Schema._instantiate_helper(
+                formula.first, constants_and_variables_instantiation_map,
+                relations_instantiation_map, bound_variables))
+
+        if is_binary(formula.root):
+            return Formula(formula.root, Schema._instantiate_helper(
+                formula.first, constants_and_variables_instantiation_map,
+                relations_instantiation_map, bound_variables),
+                           Schema._instantiate_helper(
+                               formula.second,
+                               constants_and_variables_instantiation_map,
+                               relations_instantiation_map, bound_variables))
+
+        variable = formula.variable
+        if variable in constants_and_variables_instantiation_map:
+            variable = constants_and_variables_instantiation_map[variable].root
+        return Formula(formula.root, variable, Schema._instantiate_helper(
+            formula.statement, constants_and_variables_instantiation_map,
+            relations_instantiation_map,
+            set(bound_variables).union({variable})))
 
     def instantiate(self, instantiation_map: InstantiationMap) -> \
             Union[Formula, None]:
@@ -355,6 +406,26 @@ class Schema:
                 assert is_relation(construct)
                 assert isinstance(instantiation_map[construct], Formula)
         # Task 9.4
+        constants_and_variables_instantiation_map = {}
+        relations_instantiation_map = {}
+        for construct in instantiation_map:
+            if construct not in self.templates:
+                return None
+            if is_constant(construct):
+                constants_and_variables_instantiation_map[construct] = \
+                    instantiation_map[construct]
+            elif is_variable(construct):
+                constants_and_variables_instantiation_map[construct] = \
+                    Term(instantiation_map[construct])
+            else:
+                relations_instantiation_map[construct] = \
+                    instantiation_map[construct]
+        try:
+            return Schema._instantiate_helper(
+                self.formula, constants_and_variables_instantiation_map,
+                relations_instantiation_map)
+        except Schema.BoundVariableError:
+            return None
 
 @frozen
 class Proof:
@@ -458,6 +529,9 @@ class Proof:
             """
             assert line_number < len(lines) and lines[line_number] is self
             # Task 9.5
+            return self.assumption in assumptions and \
+                self.assumption.instantiate(self.instantiation_map) == \
+                self.formula
     
     @frozen
     class MPLine:
@@ -523,6 +597,18 @@ class Proof:
             """
             assert line_number < len(lines) and lines[line_number] is self
             # Task 9.6
+            if not isinstance(self.antecedent_line_number, int) or \
+                    not isinstance(self.conditional_line_number, int) or \
+                    self.antecedent_line_number < 0 or \
+                    self.antecedent_line_number >= line_number or \
+                    self.conditional_line_number < 0 or \
+                    self.conditional_line_number >= line_number:
+                return False
+            conditional = lines[self.conditional_line_number].formula
+            return is_binary(conditional.root) and conditional.root == '->' \
+                and conditional.first == \
+                lines[self.antecedent_line_number].formula and \
+                conditional.second == self.formula
 
     @frozen
     class UGLine:
@@ -578,6 +664,11 @@ class Proof:
             """
             assert line_number < len(lines) and lines[line_number] is self
             # Task 9.7
+            return self.nonquantified_line_number >= 0 and \
+                self.nonquantified_line_number < line_number and \
+                is_quantifier(self.formula.root) and self.formula.root == 'A' \
+                and self.formula.statement == \
+                lines[self.nonquantified_line_number].formula
 
     @frozen
     class TautologyLine:
@@ -621,6 +712,8 @@ class Proof:
             """
             assert line_number < len(lines) and lines[line_number] is self
             # Task 9.9
+            return is_propositional_tautology(
+                self.formula.propositional_skeleton()[0])
 
     #: An immutable proof line.
     Line = Union[AssumptionLine, MPLine, UGLine, TautologyLine]
@@ -750,6 +843,9 @@ def _axiom_specialization_map_to_schema_instantiation_map(
     for variable in substitution_map:
         assert is_propositional_variable(variable)
     # Task 9.11a
+    return {variable.upper(): Formula.from_propositional_skeleton(
+        propositional_specialization_map[variable], substitution_map)
+            for variable in propositional_specialization_map}
 
 def _prove_from_skeleton_proof(formula: Formula,
                                skeleton_proof: PropositionalProof,
@@ -784,6 +880,26 @@ def _prove_from_skeleton_proof(formula: Formula,
         for operator in line.formula.operators():
             assert is_unary(operator) or is_binary(operator)
     # Task 9.11b
+    lines = []
+    for line_number, line in enumerate(skeleton_proof.lines):
+        predicate_formula = Formula.from_propositional_skeleton(
+            line.formula, substitution_map)
+        if line.rule == MP:
+            lines.append(Proof.MPLine(predicate_formula, line.assumptions[0],
+                                      line.assumptions[1]))
+        else:
+            rule_for_line = skeleton_proof.rule_for_line(line_number)
+            assert rule_for_line is not None
+            propositional_specialization_map = line.rule.specialization_map(
+                rule_for_line)
+            assert propositional_specialization_map is not None
+            schema = PROPOSITIONAL_AXIOM_TO_SCHEMA[line.rule]
+            instantiation_map = \
+                _axiom_specialization_map_to_schema_instantiation_map(
+                    propositional_specialization_map, substitution_map)
+            lines.append(Proof.AssumptionLine(predicate_formula, schema,
+                                              instantiation_map))
+    return Proof(PROPOSITIONAL_AXIOMATIC_SYSTEM_SCHEMAS, formula, lines)
 
 def prove_tautology(tautology: Formula) -> Proof:
     """Proves the given predicate-logic tautology.
@@ -802,3 +918,7 @@ def prove_tautology(tautology: Formula) -> Proof:
     assert is_propositional_tautology(skeleton)
     assert skeleton.operators().issubset({'->', '~'})
     # Task 9.12
+    skeleton, substitution_map = tautology.propositional_skeleton()
+    skeleton_proof = prove_propositional_tautology(skeleton)
+    return _prove_from_skeleton_proof(tautology, skeleton_proof,
+                                      substitution_map)
