@@ -221,6 +221,18 @@ def prove_lovers(print_as_proof_forms: bool = False) -> Proof:
                      'Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]'},
                     print_as_proof_forms)
     # Task 10.4
+    step1 = prover.add_assumption('Ax[Ey[Loves(x,y)]]')
+    step2 = prover.add_universal_instantiation('Ey[Loves(x,y)]', step1, 'x')
+    step3 = prover.add_assumption('Ax[Az[Ay[(Loves(x,y)->Loves(z,x))]]]')
+    step4 = prover.add_universal_instantiation(
+        'Az[Ay[(Loves(x,y)->Loves(z,x))]]', step3, 'x')
+    step5 = prover.add_universal_instantiation(
+        'Ay[(Loves(x,y)->Loves(z,x))]', step4, 'z')
+    step6 = prover.add_universal_instantiation(
+        '(Loves(x,y)->Loves(z,x))', step5, 'y')
+    step7 = prover.add_existential_derivation('Loves(z,x)', step2, step6)
+    step8 = prover.add_ug('Az[Loves(z,x)]', step7)
+    step9 = prover.add_ug('Ax[Az[Loves(z,x)]]', step8)
     return prover.qed()
 
 def prove_homework(print_as_proof_forms: bool = False) -> Proof:
@@ -242,6 +254,19 @@ def prove_homework(print_as_proof_forms: bool = False) -> Proof:
     prover = Prover({'~Ex[(Homework(x)&Fun(x))]',
                      'Ex[(Homework(x)&Reading(x))]'}, print_as_proof_forms)
     # Task 10.5
+    step1 = prover.add_assumption('~Ex[(Homework(x)&Fun(x))]')
+    step2 = prover.add_assumption('Ex[(Homework(x)&Reading(x))]')
+    step3 = prover.add_instantiated_assumption(
+        '((Homework(x)&Fun(x))->Ex[(Homework(x)&Fun(x))])', Prover.EI,
+        {'R': '(Homework(_)&Fun(_))', 'c': 'x'})
+    step4 = prover.add_instantiated_assumption(
+        '((Reading(x)&~Fun(x))->Ex[(Reading(x)&~Fun(x))])', Prover.EI,
+        {'R': '(Reading(_)&~Fun(_))', 'c': 'x'})
+    step5 = prover.add_tautological_implication(
+        '((Homework(x)&Reading(x))->Ex[(Reading(x)&~Fun(x))])',
+        {step1, step3, step4})
+    step6 = prover.add_existential_derivation(
+        'Ex[(Reading(x)&~Fun(x))]', step2, step5)
     return prover.qed()
 
 #: The three group axioms
@@ -356,6 +381,25 @@ def prove_group_unique_zero(print_as_proof_forms: bool = False) -> Proof:
     """
     prover = Prover(GROUP_AXIOMS.union({'plus(a,c)=a'}), print_as_proof_forms)
     # Task 10.10
+    step1 = prover.add_assumption('plus(0,x)=x')
+    step2 = prover.add_free_instantiation('plus(0,c)=c', step1, {'x': 'c'})
+    step3 = prover.add_flipped_equality('c=plus(0,c)', step2)
+    step4 = prover.add_assumption('plus(minus(x),x)=0')
+    step5 = prover.add_free_instantiation(
+        'plus(minus(a),a)=0', step4, {'x': 'a'})
+    step6 = prover.add_flipped_equality('0=plus(minus(a),a)', step5)
+    step7 = prover.add_substituted_equality(
+        'plus(0,c)=plus(plus(minus(a),a),c)', step6, 'plus(_,c)')
+    step8 = prover.add_assumption('plus(plus(x,y),z)=plus(x,plus(y,z))')
+    step9 = prover.add_free_instantiation(
+        'plus(plus(minus(a),a),c)=plus(minus(a),plus(a,c))',
+        step8, {'x': 'minus(a)', 'y': 'a', 'z': 'c'})
+    step10 = prover.add_assumption('plus(a,c)=a')
+    step11 = prover.add_substituted_equality(
+        'plus(minus(a),plus(a,c))=plus(minus(a),a)',
+        step10, 'plus(minus(a),_)')
+    step12 = prover.add_chained_equality(
+        'c=0', [step3, step7, step9, step11, step5])
     return prover.qed()
 
 #: The six field axioms
@@ -378,6 +422,52 @@ def prove_field_zero_multiplication(print_as_proof_forms: bool = False) -> \
     """
     prover = Prover(FIELD_AXIOMS, print_as_proof_forms)
     # Task 10.11
+    step1 = prover.add_assumption('plus(0,x)=x')
+    step2 = prover.add_free_instantiation('plus(0,0)=0', step1, {'x': '0'})
+    step3 = prover.add_substituted_equality(
+        'times(x,plus(0,0))=times(x,0)', step2, 'times(x,_)')
+    step4 = prover.add_assumption(
+        'times(x,plus(y,z))=plus(times(x,y),times(x,z))')
+    step5 = prover.add_free_instantiation(
+        'times(x,plus(0,0))=plus(times(x,0),times(x,0))',
+        step4, {'y': '0', 'z': '0'})
+    step6 = prover.add_flipped_equality(
+        'plus(times(x,0),times(x,0))=times(x,plus(0,0))', step5)
+    step7 = prover.add_chained_equality(
+        'plus(times(x,0),times(x,0))=times(x,0)', [step6, step3])
+    step8 = prover.add_free_instantiation(
+        'plus(0,times(x,0))=times(x,0)', step1, {'x': 'times(x,0)'})
+    step9 = prover.add_flipped_equality(
+        'times(x,0)=plus(0,times(x,0))', step8)
+    step10 = prover.add_assumption('plus(minus(x),x)=0')
+    step11 = prover.add_free_instantiation(
+        'plus(minus(times(x,0)),times(x,0))=0',
+        step10, {'x': 'times(x,0)'})
+    step12 = prover.add_flipped_equality(
+        '0=plus(minus(times(x,0)),times(x,0))', step11)
+    step13 = prover.add_substituted_equality(
+        'plus(0,times(x,0))='
+        'plus(plus(minus(times(x,0)),times(x,0)),times(x,0))',
+        step12, 'plus(_,times(x,0))')
+    step14 = prover.add_assumption(
+        'plus(plus(x,y),z)=plus(x,plus(y,z))')
+    step15 = prover.add_free_instantiation(
+        'plus(plus(minus(times(x,0)),times(x,0)),times(x,0))='
+        'plus(minus(times(x,0)),plus(times(x,0),times(x,0)))',
+        step14, {'x': 'minus(times(x,0))', 'y': 'times(x,0)',
+                 'z': 'times(x,0)'})
+    step16 = prover.add_substituted_equality(
+        'plus(minus(times(x,0)),plus(times(x,0),times(x,0)))='
+        'plus(minus(times(x,0)),times(x,0))',
+        step7, 'plus(minus(times(x,0)),_)')
+    step17 = prover.add_chained_equality(
+        'times(x,0)=0', [step9, step13, step15, step16, step11])
+    step18 = prover.add_flipped_equality('0=times(x,0)', step17)
+    step19 = prover.add_assumption('times(x,y)=times(y,x)')
+    step20 = prover.add_free_instantiation(
+        'times(x,0)=times(0,x)', step19, {'y': '0'})
+    step21 = prover.add_flipped_equality('times(0,x)=times(x,0)', step20)
+    step22 = prover.add_chained_equality('times(0,x)=0', [step21, step17])
     return prover.qed()
 
 #: Axiom schema of induction
@@ -402,6 +492,39 @@ def prove_peano_left_neutral(print_as_proof_forms: bool = False) -> Proof:
     """
     prover = Prover(PEANO_AXIOMS, print_as_proof_forms)
     # Task 10.12
+    step1 = prover.add_assumption('plus(x,0)=x')
+    step2 = prover.add_free_instantiation('plus(0,0)=0', step1, {'x': '0'})
+    step3 = prover.add_assumption('plus(x,s(y))=s(plus(x,y))')
+    step4 = prover.add_free_instantiation(
+        'plus(0,s(x))=s(plus(0,x))', step3, {'x': '0', 'y': 'x'})
+    step5 = prover.add_instantiated_assumption(
+        '(plus(0,x)=x->(s(plus(0,x))=s(plus(0,x))->s(plus(0,x))=s(x)))',
+        Prover.ME, {'R': 's(plus(0,x))=s(_)', 'c': 'plus(0,x)', 'd': 'x'})
+    step6 = prover.add_instantiated_assumption(
+        's(plus(0,x))=s(plus(0,x))', Prover.RX,
+        {'c': 's(plus(0,x))'})
+    step7 = prover.add_tautological_implication(
+        '(plus(0,x)=x->s(plus(0,x))=s(x))', {step5, step6})
+    step8 = prover.add_flipped_equality(
+        's(plus(0,x))=plus(0,s(x))', step4)
+    step10 = prover.add_instantiated_assumption(
+        '(s(plus(0,x))=plus(0,s(x))->'
+        '(s(plus(0,x))=s(x)->plus(0,s(x))=s(x)))',
+        Prover.ME,
+        {'R': '_=s(x)', 'c': 's(plus(0,x))',
+         'd': 'plus(0,s(x))'})
+    step11 = prover.add_mp(
+        '(s(plus(0,x))=s(x)->plus(0,s(x))=s(x))', step8, step10)
+    step12 = prover.add_tautological_implication(
+        '(plus(0,x)=x->plus(0,s(x))=s(x))', {step7, step11})
+    step13 = prover.add_ug(
+        'Ax[(plus(0,x)=x->plus(0,s(x))=s(x))]', step12)
+    step14 = prover.add_instantiated_assumption(
+        '((plus(0,0)=0&Ax[(plus(0,x)=x->plus(0,s(x))=s(x))])->'
+        'Ax[plus(0,x)=x])', INDUCTION_AXIOM, {'R': 'plus(0,_)=_'})
+    step15 = prover.add_tautological_implication(
+        'Ax[plus(0,x)=x]', {step2, step13, step14})
+    step16 = prover.add_universal_instantiation('plus(0,x)=x', step15, 'x')
     return prover.qed()
 
 #: Axiom schema of (unrestricted) comprehension
@@ -422,6 +545,21 @@ def prove_russell_paradox(print_as_proof_forms: bool = False) -> Proof:
     """
     prover = Prover({COMPREHENSION_AXIOM}, print_as_proof_forms)
     # Task 10.13
+    step1 = prover.add_instantiated_assumption(
+        'Ey[Ax[((In(x,y)->~In(x,x))&(~In(x,x)->In(x,y)))]]',
+        COMPREHENSION_AXIOM, {'R': '~In(_,_)'})
+    step2 = prover.add_instantiated_assumption(
+        '(Ax[((In(x,y)->~In(x,x))&(~In(x,x)->In(x,y)))]->'
+        '((In(y,y)->~In(y,y))&(~In(y,y)->In(y,y))))',
+        Prover.UI,
+        {'R': '((In(_,y)->~In(_,_))&(~In(_,_)->In(_,y)))',
+         'c': 'y'})
+    step3 = prover.add_tautology(
+        '(((In(y,y)->~In(y,y))&(~In(y,y)->In(y,y)))->(z=z&~z=z))')
+    step4 = prover.add_tautological_implication(
+        '(Ax[((In(x,y)->~In(x,x))&(~In(x,x)->In(x,y)))]->(z=z&~z=z))',
+        {step2, step3})
+    step5 = prover.add_existential_derivation('(z=z&~z=z)', step1, step4)
     return prover.qed()
 
 def _prove_not_exists_not_implies_all(variable: str, formula: Formula,
